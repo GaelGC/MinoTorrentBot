@@ -9,12 +9,65 @@ const webtorrent_client = new webTorrent();
 const local_out_dir = "/srv/http/";
 const remote_out_dir = "http://server_address/";
 
+var emojis: discord.Emoji[] = new Array();
+
+class TorrentState {
+    constructor(embed: discord.MessageEmbed, hash: string, url: string,
+        message: discord.Message, embed_message: Promise<discord.Message>) {
+        this.embed = embed;
+        this.url = url;
+        this.hash = hash;
+        this.message = message;
+        this.embed_message = embed_message;
+        this.last_update = Date.now()
+    }
+    embed: discord.MessageEmbed;
+    url: string;
+    hash: string;
+    message: discord.Message;
+    embed_message: Promise<discord.Message>;
+    last_update: number;
+};
+
+var torrent_map: Map<webTorrent.Torrent, TorrentState> = new Map();
+
+function state_str(msg: discord.MessageEmbed, percent: number) {
+    const oldIdx = msg.fields.findIndex((elem) => elem.name === 'state');
+    if (oldIdx !== -1) {
+        msg.fields.splice(oldIdx, 1);
+    }
+
+    percent = (percent + 0.001) | 0;
+    var str: string = "";
+    const tens = (percent / 10) | 0;
+    const units = (percent % 10) | 0;
+    for (var iter = 0; iter < 10; iter++) {
+        if (tens > iter) {
+            str += emojis[10].toString();
+        } else if (iter == tens) {
+            str += emojis[units].toString();
+        } else {
+            str += emojis[0].toString();
+        }
+    }
+    msg.addField("state", str);
+    return msg;
+}
+
 client.on('ready', () => {
     if (client.user === null) {
         console.error("Unable to log to Discord.");
         throw new Error();
     }
     console.log(`Logged in as ${client.user.tag}. ID ${client.user.id}`);
+    [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].forEach((idx) => {
+        const emoji_name = "torrent_" + idx;
+        const emoji = client.emojis.cache.find(emoji => emoji.name === emoji_name);
+        if (emoji === undefined) {
+            throw ("Unknown emoji " + emoji_name);
+        }
+        emojis.push(emoji);
+    });
 });
 
 function split_line(line: string): string[] | undefined {
@@ -59,6 +112,23 @@ function reply_to_message(message: discord.Message, response: string) {
     fake_message.lineReply(response);
 }
 
+webtorrent_client.on('torrent', (torrent) => {
+    var embed = torrent_map.get(torrent);
+    if (embed === undefined) {
+        return;
+    }
+    embed.last_update = Date.now();
+    embed.embed = state_str(embed.embed, 0).setTitle(torrent.name);
+    embed.embed_message = embed.embed_message.then((m) => {
+        var e = embed?.embed;
+        if (embed === undefined || e === undefined) {
+            return m;
+        }
+        embed.embed_message = m.edit(e);;
+        return embed.embed_message;
+    });
+});
+
 function handle_line(message: discord.Message, line: string[]) {
     var url = line[0];
 
@@ -67,42 +137,72 @@ function handle_line(message: discord.Message, line: string[]) {
     const hash = CryptoJS.SHA256(url);
     const torrent = webtorrent_client.add(url,
         { path: `${local_out_dir}/${hash}` });
+
+    var embed = new discord.MessageEmbed()
+        .setAuthor("MinoTorrentBot")
+        .setDescription("Temporary post")
+        .setTitle(url)
+        .addField('url', url);
+    torrent_map.set(torrent, new TorrentState(embed, hash, url, message, message.channel.send(embed)));
+
     torrent.on('done', function () {
-        let file_str : string[] = new Array();
+        var embed = torrent_map.get(torrent);
+        if (embed === undefined) {
+            return;
+        }
+
+        const hash = embed.hash;
+        var description = "";
         torrent.files.forEach((file) => {
-            file_str.push(`${remote_out_dir}/${hash}/${file.path}`);
+            description += `[${file.name}](${remote_out_dir}/${hash}/${file.path.replace(/ /g, "%20")})` + '\n';
+            console.log(description);
         });
-        reply_to_message(message, file_str.join('\n').replace(/ /g, "%20"));
+        description += `<@${embed.message.author.id}>`;
+        embed.embed = state_str(embed.embed, 100).setDescription(description);
+        embed.embed_message = embed.embed_message.then((m) => {
+            var e = embed?.embed;
+            if (embed === undefined || e === undefined) {
+                return m;
+            }
+            embed.embed_message = m.edit(e);;
+            return embed.embed_message;
+        });
+        torrent_map.delete(torrent);
         torrent.destroy();
+        embed.embed_message.then((m) => {
+            if (!embed) {
+                return;
+            }
+            console.log(m.toString());
+            reply_to_message(embed.message, `Download for ${embed.url} finished. See ${m.url} for details`);
+        });
     });
 
     var emoji = client.emojis.cache.find(emoji => emoji.name === "torrent_ack");
 
-    let promise: Promise<void | discord.MessageReaction> = Promise.resolve();
+    if (emoji !== undefined) {
+        message.react(emoji);
+    }
 
-    promise = promise.then(() => {
-        if (emoji !== undefined) {
-            message.react(emoji);
-        }
-    });
     let previous_progress = 101;
     torrent.on('download', function (bytes) {
-        let cur_progress = ((100 * (torrent.progress + 0.001) / 10) | 0) * 10;
-        if (cur_progress != previous_progress && promise !== undefined) {
-            const new_emoji_name = "torrent_" + cur_progress;
-            const old_emoji_name = "torrent_" + previous_progress;
-            promise = promise.then(async () => {
-                const old_emoji = message.reactions.cache.find(r => r.emoji.name == old_emoji_name);
-                if (old_emoji) {
-                    await old_emoji.users.remove(client.user?.id);
+        let cur_progress = (100 * (torrent.progress + 0.001)) | 0;
+        const now = Date.now();
+        const embed = torrent_map.get(torrent);
+        if (!embed) {
+            return;
+        }
+        if (cur_progress != previous_progress && (now - embed.last_update > 5000)) {
+            embed.last_update = Date.now();
+            embed.embed_message = embed.embed_message.then((m) => {
+                embed.embed = state_str(embed.embed, cur_progress);
+                var e = embed?.embed;
+                if (embed === undefined || e === undefined) {
+                    return m;
                 }
-                var emoji = client.emojis.cache.find(emoji => emoji.name === new_emoji_name);
-                if (emoji !== undefined) {
-                    var real_emoji = emoji;
-                    await message.react(real_emoji);
-                }
+                embed.embed_message = m.edit(e);;
+                return embed.embed_message;
             });
-            previous_progress = cur_progress;
         }
     });
 }
