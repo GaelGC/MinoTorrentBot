@@ -11,22 +11,33 @@ const remote_out_dir = "http://server_address/";
 
 var emojis: discord.Emoji[] = new Array();
 
+class RemindState {
+    constructor(date: number, mentions: string) {
+        this.date = date;
+        this.mentions = mentions;
+    }
+    date: number;
+    mentions: string;
+};
+
 class TorrentState {
     constructor(embed: discord.MessageEmbed, hash: string, url: string,
-        message: discord.Message, embed_message: Promise<discord.Message>) {
+        message: discord.Message) {
         this.embed = embed;
         this.url = url;
         this.hash = hash;
         this.message = message;
-        this.embed_message = embed_message;
+        this.embed_message = undefined;
         this.last_update = Date.now()
+        this.reminder = undefined;
     }
     embed: discord.MessageEmbed;
     url: string;
     hash: string;
     message: discord.Message;
-    embed_message: Promise<discord.Message>;
+    embed_message: Promise<discord.Message> | undefined;
     last_update: number;
+    reminder: RemindState | undefined;
 };
 
 var torrent_map: Map<webTorrent.Torrent, TorrentState> = new Map();
@@ -71,12 +82,43 @@ client.on('ready', () => {
 });
 
 function split_line(line: string): string[] | undefined {
-    var res: string[] | undefined = new Array();
+    var res: string[] | undefined = undefined;
 
-    res = line.replace(/\s+/g, ' ').trim().split(' ');
-
-    if (res.length === 1 && res[0] === "") {
-        res = undefined;
+    var quoted_res = line.replace(/\s+/g, ' ').trim().split(' ');
+    if (quoted_res.length !== 1 || quoted_res[0] !== "") {
+        var dequoted_res: string[] = new Array();
+        var cur_str: string = "";
+        var idx: number = 0;
+        var in_quote = false;
+        while (idx !== quoted_res.length) {
+            var val = quoted_res[idx];
+            const quote_pos = val.indexOf("\"");
+            const last_quote_pos = val.lastIndexOf("\"");
+            const allowed_quote_pos = in_quote ? [-1, val.length - 1] : [-1, 0];
+            if (!allowed_quote_pos.includes(quote_pos) || quote_pos !== last_quote_pos) {
+                console.error("Quote encountered in an unexpected place");
+                return undefined;
+            }
+            if (quote_pos == -1) {
+                if (in_quote) {
+                    cur_str += " " + val;
+                } else {
+                    dequoted_res.push(val);
+                }
+            } else {
+                val = val.replace('"', "");
+                if (in_quote) {
+                    cur_str += " " + val;
+                    dequoted_res.push(cur_str);
+                    in_quote = false;
+                } else {
+                    cur_str = val;
+                    in_quote = true;
+                }
+            }
+            idx++;
+        }
+        res = dequoted_res;
     }
 
     return res;
@@ -119,7 +161,7 @@ webtorrent_client.on('torrent', (torrent) => {
     }
     embed.last_update = Date.now();
     embed.embed = state_str(embed.embed, 0).setTitle(torrent.name);
-    embed.embed_message = embed.embed_message.then((m) => {
+    embed.embed_message = embed.embed_message?.then((m) => {
         var e = embed?.embed;
         if (embed === undefined || e === undefined) {
             return m;
@@ -129,21 +171,73 @@ webtorrent_client.on('torrent', (torrent) => {
     });
 });
 
-function handle_line(message: discord.Message, line: string[]) {
-    var url = line[0];
-
+function get_torrent(url: string): [webTorrent.Torrent, string, string] {
     console.log(`Downloading ${url}`);
 
     const hash = CryptoJS.SHA256(url);
     const torrent = webtorrent_client.add(url,
         { path: `${local_out_dir}/${hash}` });
+    torrent.pause();
+    return [torrent, url, hash];
+}
+
+function parse_remind(line: string[], start_idx: number)
+    : [RemindState | undefined, number, string | undefined] {
+    if (start_idx + 2 >= line.length) {
+        return [undefined, -1, "Usage: Remind <date> <groups>"];
+    }
+    const date_str = line[start_idx + 1];
+    const groups_str = line[start_idx + 2];
+    start_idx += 3;
+    const date = Date.parse(date_str);
+    if (isNaN(date)) {
+        return [undefined, -1, "Remind: Invalid date " + date_str];
+    }
+    return [new RemindState(date, groups_str), start_idx, undefined];
+}
+
+function handle_line(message: discord.Message, line: string[]) {
+    const torrent_data = get_torrent(line[0]);
+    const torrent = torrent_data[0];
+    const url = torrent_data[1];
+    const hash = torrent_data[2];
 
     var embed = new discord.MessageEmbed()
         .setAuthor("MinoTorrentBot")
         .setDescription("Temporary post")
         .setTitle(url)
         .addField('url', url);
-    torrent_map.set(torrent, new TorrentState(embed, hash, url, message, message.channel.send(embed)));
+
+    const torrent_state = new TorrentState(embed, hash, url, message)
+    var arg_idx: number = 1;
+    var error: String | undefined = undefined;
+    while (arg_idx != line.length && arg_idx >= 0) {
+        switch (line[arg_idx]) {
+            case "remind": {
+                var reminder : RemindState | undefined = undefined;
+                [reminder, arg_idx, error] = parse_remind(line, arg_idx);
+                if (reminder !== undefined) {
+                    torrent_state.reminder = reminder;
+                }
+                break;
+            }
+            default: {
+                error = "Unknown argument " + line[arg_idx];
+                arg_idx = -1;
+                break;
+            }
+        }
+    }
+
+    if (error !== undefined) {
+        torrent.destroy();
+        reply_to_message(message, `error: ${error}`);
+        return;
+    }
+
+    torrent_state.embed_message = message.channel.send(embed)
+    torrent.resume();
+    torrent_map.set(torrent, torrent_state);
 
     torrent.on('done', function () {
         var embed = torrent_map.get(torrent);
@@ -163,7 +257,7 @@ function handle_line(message: discord.Message, line: string[]) {
         });
         description += `<@${embed.message.author.id}>`;
         embed.embed = state_str(embed.embed, 100).setDescription(description);
-        embed.embed_message = embed.embed_message.then((m) => {
+        embed.embed_message = embed.embed_message?.then((m) => {
             var e = embed?.embed;
             if (embed === undefined || e === undefined) {
                 return m;
@@ -173,11 +267,10 @@ function handle_line(message: discord.Message, line: string[]) {
         });
         torrent_map.delete(torrent);
         torrent.destroy();
-        embed.embed_message.then((m) => {
+        embed.embed_message?.then((m) => {
             if (!embed) {
                 return;
             }
-            console.log(m.toString());
             reply_to_message(embed.message, `Download for ${embed.url} finished. See ${m.url} for details`);
         });
     });
@@ -198,7 +291,7 @@ function handle_line(message: discord.Message, line: string[]) {
         }
         if (cur_progress != previous_progress && (now - embed.last_update > 5000)) {
             embed.last_update = Date.now();
-            embed.embed_message = embed.embed_message.then((m) => {
+            embed.embed_message = embed.embed_message?.then((m) => {
                 embed.embed = state_str(embed.embed, cur_progress);
                 var e = embed?.embed;
                 if (embed === undefined || e === undefined) {
