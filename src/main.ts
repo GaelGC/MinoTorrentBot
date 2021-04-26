@@ -2,6 +2,7 @@ import discord = require('discord.js');
 require('discord-reply');
 import webTorrent = require('webtorrent')
 import CryptoJS = require('crypto-js');
+import { RemindState, TorrentState } from './types';
 
 const client = new discord.Client();
 const webtorrent_client = new webTorrent();
@@ -10,35 +11,6 @@ const local_out_dir = "/srv/http/";
 const remote_out_dir = "http://server_address/";
 
 var emojis: discord.Emoji[] = new Array();
-
-class RemindState {
-    constructor(date: number, mentions: string) {
-        this.date = date;
-        this.mentions = mentions;
-    }
-    date: number;
-    mentions: string;
-};
-
-class TorrentState {
-    constructor(embed: discord.MessageEmbed, hash: string, url: string,
-        message: discord.Message) {
-        this.embed = embed;
-        this.url = url;
-        this.hash = hash;
-        this.message = message;
-        this.embed_message = undefined;
-        this.last_update = Date.now()
-        this.reminder = undefined;
-    }
-    embed: discord.MessageEmbed;
-    url: string;
-    hash: string;
-    message: discord.Message;
-    embed_message: Promise<discord.Message> | undefined;
-    last_update: number;
-    reminder: RemindState | undefined;
-};
 
 var torrent_map: Map<webTorrent.Torrent, TorrentState> = new Map();
 
@@ -193,7 +165,7 @@ function parse_remind(line: string[], start_idx: number)
     if (isNaN(date)) {
         return [undefined, -1, "Remind: Invalid date " + date_str];
     }
-    return [new RemindState(date, groups_str), start_idx, undefined];
+    return [new RemindState(date, [groups_str]), start_idx, undefined];
 }
 
 function handle_line(message: discord.Message, line: string[]) {

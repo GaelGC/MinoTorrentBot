@@ -14,6 +14,7 @@
     "discord-reply": "^0.1.2",
     "discord.js": "^12.5.3",
     "typescript": "^4.2.4",
+    "typescript-result": "^1.2.0",
     "webtorrent": "^0.118.0"
   },
   "devDependencies": {
