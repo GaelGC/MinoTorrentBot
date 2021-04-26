@@ -3,6 +3,7 @@ require('discord-reply');
 import webTorrent = require('webtorrent')
 import CryptoJS = require('crypto-js');
 import { RemindState, TorrentState } from './types';
+import { split_message } from './parser';
 
 const client = new discord.Client();
 const webtorrent_client = new webTorrent();
@@ -52,63 +53,6 @@ client.on('ready', () => {
         emojis.push(emoji);
     });
 });
-
-function split_line(line: string): string[] | undefined {
-    var res: string[] | undefined = undefined;
-
-    var quoted_res = line.replace(/\s+/g, ' ').trim().split(' ');
-    if (quoted_res.length !== 1 || quoted_res[0] !== "") {
-        var dequoted_res: string[] = new Array();
-        var cur_str: string = "";
-        var idx: number = 0;
-        var in_quote = false;
-        while (idx !== quoted_res.length) {
-            var val = quoted_res[idx];
-            const quote_pos = val.indexOf("\"");
-            const last_quote_pos = val.lastIndexOf("\"");
-            const allowed_quote_pos = in_quote ? [-1, val.length - 1] : [-1, 0];
-            if (!allowed_quote_pos.includes(quote_pos) || quote_pos !== last_quote_pos) {
-                console.error("Quote encountered in an unexpected place");
-                return undefined;
-            }
-            if (quote_pos == -1) {
-                if (in_quote) {
-                    cur_str += " " + val;
-                } else {
-                    dequoted_res.push(val);
-                }
-            } else {
-                val = val.replace('"', "");
-                if (in_quote) {
-                    cur_str += " " + val;
-                    dequoted_res.push(cur_str);
-                    in_quote = false;
-                } else {
-                    cur_str = val;
-                    in_quote = true;
-                }
-            }
-            idx++;
-        }
-        res = dequoted_res;
-    }
-
-    return res;
-}
-
-function split_message(message: string): string[][] | undefined {
-    var res: string[][] = new Array();
-    var lines = message.split('\n');
-
-    lines.forEach(line => {
-        const splitted = split_line(line);
-        if (splitted !== undefined) {
-            res.push(splitted);
-        }
-    })
-
-    return res.length === 0 ? undefined : res;
-}
 
 function getRole(guild: discord.Guild | null): string {
     if (guild === null) {
@@ -186,7 +130,7 @@ function handle_line(message: discord.Message, line: string[]) {
     while (arg_idx != line.length && arg_idx >= 0) {
         switch (line[arg_idx]) {
             case "remind": {
-                var reminder : RemindState | undefined = undefined;
+                var reminder: RemindState | undefined = undefined;
                 [reminder, arg_idx, error] = parse_remind(line, arg_idx);
                 if (reminder !== undefined) {
                     torrent_state.reminder = reminder;
@@ -299,9 +243,11 @@ client.on('message', message => {
         return;
     }
 
-    splitted.forEach(line => {
-        handle_line(message, line);
-    });
+    if (splitted.isSuccess()) {
+        splitted.value.forEach(line => {
+            handle_line(message, line);
+        });
+    }
 });
 
 client.login("INSERT YOUR TOKEN HERE");
