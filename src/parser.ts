@@ -20,10 +20,12 @@ function split_line(line: string): Result<Error, string[]> {
         }
         const quote_pos = cur_str.indexOf("\"");
         const last_quote_pos = cur_str.lastIndexOf("\"");
+        // We check that the pattern is either X or X" if we are already in a quote.
         if (in_quote && !([-1, cur_str.length - 1].includes(quote_pos))) {
             return Result.error(new Error(
                 `Invalid argument ${cur_str}. Expected quotes to be at the end.`));
         }
+        // We check that the pattern is either "X, X or "X" if we are not in a quote.
         if (!in_quote && ((quote_pos !== -1 && quote_pos !== 0) ||
             (last_quote_pos !== quote_pos && last_quote_pos !== cur_str.length - 1))) {
             return Result.error(new Error(
