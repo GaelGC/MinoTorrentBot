@@ -4,33 +4,18 @@ import webTorrent = require('webtorrent')
 import CryptoJS = require('crypto-js');
 import { RemindState, TorrentState } from './types';
 import { split_message } from './parser';
-import { initialize_discord_manager } from './discord_manager';
+import { get_discord_manager, initialize_discord_manager } from './discord_manager';
 
 const client = new discord.Client();
 const webtorrent_client = new webTorrent();
+const local_out_dir = "/srv/http/";
 initialize_discord_manager(client);
 
-const local_out_dir = "/srv/http/";
-
 var torrent_map: Map<webTorrent.Torrent, TorrentState> = new Map();
-
-client.on('ready', () => {
-});
 
 function reply_to_message(message: discord.Message, response: string) {
     const fake_message: any = message;
     fake_message.lineReply(response);
-}
-
-function getRole(guild: discord.Guild | null): string {
-    if (guild === null) {
-        return "error: no guild";
-    }
-    const myRole = guild.roles.cache.find(role => role.name === "Minobot");
-    if (myRole === undefined) {
-        return "Unable to find role Minobot";
-    }
-    return myRole.id;
 }
 
 webtorrent_client.on('torrent', (torrent) => {
@@ -137,15 +122,12 @@ client.on('message', message => {
         throw new Error();
     }
 
-    const role_id = getRole(message.guild);
-    const tag: RegExp = new RegExp(`<@(!?${client.user.id}|&${role_id})>`);
-    let text = message.content;
-    console.log(text);
-    if (!text.match(tag)) {
+    const msg = get_discord_manager().has_mention(message);
+    if (msg.isFailure()) {
         return;
     }
-    text = text.replace(tag, "");
 
+    const text = msg.value;
     const splitted = split_message(text);
     console.log(splitted)
     if (splitted === undefined) {

@@ -54,6 +54,27 @@ class DiscordManager {
         res += ` ${percent}%`;
         return Result.ok(res);
     }
+
+    has_mention(message: discord.Message): Result<boolean, string> {
+        var ids: string[] = new Array();
+        ids.push(this.client.user!.id);
+
+        if (message.guild !== null) {
+            const my_role = message.guild.roles.cache.find(role => role.name === "MinoTorrentBot");
+            if (my_role !== undefined) {
+                ids.push(my_role.id);
+            }
+        }
+
+        const text = message.content;
+        const regex = RegExp(`<@[!&]?(${ids.join('|')})>`, "g");
+        const matches = text.match(regex);
+        if (!matches) {
+            return Result.error(false);
+        }
+
+        return Result.ok(text.replace(regex, ""));
+    }
 }
 
 var singleton: DiscordManager;
