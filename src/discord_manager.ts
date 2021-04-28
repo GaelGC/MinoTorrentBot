@@ -7,7 +7,7 @@ class DiscordManager {
         this.client = client;
     }
 
-    private get_emoji(name: string): Result<string, discord.Emoji> {
+    get_emoji(name: string): Result<string, discord.GuildEmoji> {
         const emoji = this.client.emojis.cache.find(emoji => emoji.name === name);
         if (emoji !== undefined) {
             return Result.ok(emoji);
