@@ -4,6 +4,7 @@ import WebTorrent = require('webtorrent');
 import { get_discord_manager } from './discord_manager';
 import CryptoJS = require('crypto-js');
 import { RemindState } from './reminder';
+import fs = require('fs');
 
 const remote_out_dir = process.env.REMOTE_DIR;
 const local_out_dir = process.env.LOCAL_DIR;
@@ -15,6 +16,13 @@ setInterval(async function () {
         torrent.tick();
     }
 }, 5000);
+setInterval(async function () {
+    var torrents = Array();
+    for (var torrent of Array.from(torrent_map.values())) {
+        torrents.push(await torrent.serialize());
+    }
+    fs.writeFileSync("torrents.json", JSON.stringify(torrents));
+}, 300000);
 
 export class TorrentState {
     constructor(user_url: string, message: discord.Message, embed?: discord.MessageEmbed) {
@@ -45,6 +53,7 @@ export class TorrentState {
         obj["message"] = this.message.id;
         obj["channel"] = this.message.channel.id;
         obj["guild"] = this.message.guild?.id;
+        const paused = this.torrent.paused;
         this.torrent.pause();
         var embed_message = this.embed_message;
         do {
@@ -60,6 +69,9 @@ export class TorrentState {
         obj["message_sent"] = this.message_sent;
         if (this.reminder !== undefined) {
             obj["reminder"] = this.reminder.serialize();
+        }
+        if (!paused) {
+            this.torrent.resume();
         }
         return obj;
     };

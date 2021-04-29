@@ -6,6 +6,7 @@ import { TorrentState } from './torrent';
 import { parse_line, split_message } from './parser';
 import { get_discord_manager, initialize_discord_manager } from './discord_manager';
 import { Result } from 'typescript-result';
+import fs = require('fs');
 
 const client = new discord.Client();
 initialize_discord_manager(client);
@@ -58,5 +59,21 @@ client.on('message', message => {
         }
     }
 });
+
+client.on('ready', () => {
+    fs.readFile('torrents.json', async (err, data)=>{
+        if (err !== null) {
+            return;
+        }
+        var torrents = JSON.parse(data.toString());
+        for (const torrent of torrents) {
+            const load = await TorrentState.parse(torrent);
+            if (load.isFailure()) {
+                console.log(load.error);
+                process.exit(1);
+            }
+        }
+    })
+})
 
 client.login(process.env.DISCORD_TOKEN);
