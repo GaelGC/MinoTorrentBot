@@ -75,6 +75,33 @@ class DiscordManager {
 
         return Result.ok(text.replace(regex, ""));
     }
+
+    get_mention(name: string, guild: discord.Guild): Result<string, string> {
+        const user = guild.members.cache.find((user) =>
+            user.displayName.replace(" ", "_") === name || user.nickname?.replace(" ", "_") === name ||
+            user.id.includes(name) || user.user.tag == name);
+        const role = guild.roles.cache.find((role) =>
+            role.name.replace(" ", "_") === name || role.id.includes(name));
+        if (user !== undefined) {
+            return Result.ok(`<@${user.id}>`);
+        } else if (role !== undefined) {
+            return Result.ok(`<@&${role.id}>`);
+        } else {
+            return Result.error(`Unable to find any match for ${name}`);
+        }
+    }
+
+    get_mentions(names: string[], guild: discord.Guild): Result<string, string> {
+        var results: string[] = new Array();
+        for (var name of names) {
+            const res = this.get_mention(name, guild);
+            if (res.isFailure()) {
+                return res.forward();
+            }
+            results.push(res.value);
+        }
+        return Result.ok(results.join(" "));
+    }
 }
 
 var singleton: DiscordManager;

@@ -1,9 +1,10 @@
 import discord = require('discord.js');
 require('discord-reply');
 import webTorrent = require('webtorrent');
-import { RemindState, TorrentState } from './types';
-import { split_message } from './parser';
+import { TorrentState } from './torrent';
+import { parse_line, split_message } from './parser';
 import { get_discord_manager, initialize_discord_manager } from './discord_manager';
+import { Result } from 'typescript-result';
 
 const client = new discord.Client();
 initialize_discord_manager(client);
@@ -13,8 +14,12 @@ function reply_to_message(message: discord.Message, response: string) {
     fake_message.lineReply(response);
 }
 
-function handle_line(message: discord.Message, line: string[]) {
-    const torrent_state = new TorrentState(line[0], message);
+function handle_line(message: discord.Message, line: string[]): Result<string, void> {
+    const torrent = parse_line(message, line);
+    if (torrent.isFailure()) {
+        return torrent.forward();
+    }
+    return Result.ok();
 }
 
 client.on('message', message => {
@@ -38,9 +43,18 @@ client.on('message', message => {
     }
 
     if (splitted.isSuccess()) {
-        splitted.value.forEach(line => {
-            handle_line(message, line);
-        });
+        var failures = "Failed to handle the following lines:\n";
+        var failed = false;
+        for (var line of splitted.value) {
+            const res = handle_line(message, line);
+            if (res.isFailure()) {
+                failures += `"${line}": ${res.error}\n`;
+                failed = true;
+            }
+        }
+        if (failed) {
+            reply_to_message(message, failures);
+        }
     }
 });
 

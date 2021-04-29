@@ -3,25 +3,18 @@ import { Result } from 'typescript-result';
 import WebTorrent = require('webtorrent');
 import { get_discord_manager } from './discord_manager';
 import CryptoJS = require('crypto-js');
+import { RemindState } from './reminder';
 
 const remote_out_dir = "http://server_address/";
 const local_out_dir = "/srv/http";
 const webtorrent_client = new WebTorrent();
 
 var torrent_map: Map<WebTorrent.Torrent, TorrentState> = new Map();
-
-export class RemindState {
-    constructor(date: number, mentions: string[]) {
-        this.date = date;
-        this.mentions = mentions;
+setInterval(function () {
+    for (var torrent of Array.from(torrent_map.values())) {
+        torrent.tick();
     }
-    private date: number;
-    private mentions: string[];
-
-    timer_expired(): boolean {
-        return Date.now() - this.date > 0;
-    }
-};
+}, 5000);
 
 export class TorrentState {
     constructor(user_url: string, message: discord.Message) {
@@ -41,6 +34,25 @@ export class TorrentState {
         torrent_map.set(this.torrent, this);
     }
 
+    kill(error: boolean = false) {
+        this.torrent.destroy();
+        this.torrent_finished = true;
+        this.reminder?.kill();
+        torrent_map.delete(this.torrent);
+        if (error) {
+            this.embed_message?.then(m => m.delete());
+        }
+    }
+
+    tick() {
+        if (this.torrent_finished) {
+            this.reminder?.tick();
+        }
+        if (this.finished()) {
+            this.kill();
+        }
+    }
+
     private set_torrent(url: string): [WebTorrent.Torrent, string, string] {
         console.log(`Downloading ${url}`);
 
@@ -55,6 +67,7 @@ export class TorrentState {
             } else {
                 this.reply_to_message(`Error on ${this.url}: ${err.message}`);
             }
+            torrent.destroy();
             torrent_map.delete(torrent);
         });
 
@@ -65,7 +78,7 @@ export class TorrentState {
             if (emoji.isSuccess()) {
                 this.message.react(emoji.value);
             } else {
-                this.message.reply(emoji.error);
+                this.reply_to_message(emoji.error);
             }
         });
 
@@ -76,6 +89,12 @@ export class TorrentState {
 
         torrent.on('done', () => {
             this.update_embed(torrent, 100, true, true);
+            this.embed_message = this.embed_message?.then((m) => {
+                this.reminder?.set_result_url(m.url);
+                torrent.destroy();
+                this.torrent_finished = true;
+                return m;
+            });
         });
 
         return [torrent, url, hash];
@@ -114,8 +133,6 @@ export class TorrentState {
                 description += `<@${this.message.author.id}>`;
                 this.embed!.setDescription(description);
                 console.log("Set desc as " + description);
-                torrent_map.delete(torrent);
-                torrent.destroy();
             }
             var edit = message.edit(this.embed!);
             if (finished) {
@@ -157,6 +174,16 @@ export class TorrentState {
         return Result.ok(this.embed);
     }
 
+    finished(): boolean {
+        if (!this.torrent_finished) {
+            return false;
+        }
+        if (this.reminder !== undefined && !this.reminder.finished()) {
+            return false;
+        }
+        return true;
+    }
+
     private embed: discord.MessageEmbed;
     url: string;
     hash: string;
@@ -165,4 +192,5 @@ export class TorrentState {
     private last_update: number;
     reminder: RemindState | undefined;
     torrent: WebTorrent.Torrent;
+    private torrent_finished: boolean = false;
 };

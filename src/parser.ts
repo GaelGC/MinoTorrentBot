@@ -1,5 +1,8 @@
 import { Result } from "typescript-result";
-
+import { TorrentState } from "./torrent";
+import discord = require('discord.js');
+import { RemindState } from "./reminder";
+import { get_discord_manager } from "./discord_manager";
 
 function split_line(line: string): Result<Error, string[]> {
     // Remove all useless spaces
@@ -74,4 +77,41 @@ export function split_message(message: string): Result<Error, string[][]> {
         }
     }
     return Result.ok(res);
+}
+
+function parse_reminder(message: discord.Message, line: string[], pos: number): Result<string, [RemindState, number]> {
+    if (line.length <= pos + 1) {
+        return Result.error("Invalid usage for remind command. Usage: remind <date> <mentions without @>");
+    }
+    const date = Date.parse(line[pos]);
+    const mentions = line[pos + 1];
+
+    if (isNaN(date)) {
+        return Result.error("Invalid date " + line[pos]);
+    }
+    const mention_str = get_discord_manager().get_mentions(mentions.split(" "), message.guild!);
+    if (mention_str.isFailure()) {
+        return mention_str.forward();
+    }
+    return Result.ok([new RemindState(date, mention_str.value, message), pos + 2]);
+}
+
+export function parse_line(message: discord.Message, line: string[]): Result<string, TorrentState> {
+    var torrent = new TorrentState(line[0], message);
+    var line_idx = 1;
+    while (line_idx !== -1 && line_idx !== line.length) {
+        const key = line[line_idx];
+        if (key === "remind") {
+            const reminder = parse_reminder(message, line, line_idx + 1);
+            if (reminder.isFailure()) {
+                torrent.kill(true);
+                return reminder.forward();
+            }
+            [torrent.reminder, line_idx] = reminder.value;
+        } else {
+            torrent.kill(true);
+            return Result.error(`Invalid command ${key}`);
+        }
+    }
+    return Result.ok(torrent);
 }
