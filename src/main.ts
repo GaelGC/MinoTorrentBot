@@ -1,3 +1,4 @@
+require('dotenv').config()
 import discord = require('discord.js');
 require('discord-reply');
 import webTorrent = require('webtorrent');
@@ -58,4 +59,4 @@ client.on('message', message => {
     }
 });
 
-client.login("INSERT YOUR TOKEN HERE");
+client.login(process.env.DISCORD_TOKEN);

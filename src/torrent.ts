@@ -5,8 +5,8 @@ import { get_discord_manager } from './discord_manager';
 import CryptoJS = require('crypto-js');
 import { RemindState } from './reminder';
 
-const remote_out_dir = "http://server_address/";
-const local_out_dir = "/srv/http";
+const remote_out_dir = process.env.REMOTE_DIR;
+const local_out_dir = process.env.LOCAL_DIR;
 const webtorrent_client = new WebTorrent();
 
 var torrent_map: Map<WebTorrent.Torrent, TorrentState> = new Map();
