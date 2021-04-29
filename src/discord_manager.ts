@@ -78,10 +78,10 @@ class DiscordManager {
 
     get_mention(name: string, guild: discord.Guild): Result<string, string> {
         const user = guild.members.cache.find((user) =>
-            user.displayName.replace(" ", "_") === name || user.nickname?.replace(" ", "_") === name ||
+            user.displayName.replace(/ /g, "_") === name || user.nickname?.replace(/ /g, "_") === name ||
             user.id.includes(name) || user.user.tag == name);
         const role = guild.roles.cache.find((role) =>
-            role.name.replace(" ", "_") === name || role.id.includes(name));
+            role.name.replace(/ /g, "_") === name || role.id.includes(name));
         if (user !== undefined) {
             return Result.ok(`<@${user.id}>`);
         } else if (role !== undefined) {
