@@ -55,6 +55,68 @@ class DiscordManager {
         return Result.ok(res);
     }
 
+    async find_guild(guild_id: string): Promise<Result<string, discord.Guild>> {
+        var guild: discord.Guild | undefined;
+        guild = this.client.guilds.cache.get(guild_id);
+        if (guild !== undefined) {
+            return Result.ok(guild);
+        }
+        try {
+            return Result.ok(await this.client.guilds.fetch(guild_id));
+        } catch {
+            return Result.error(`Unable to find guild ${guild_id}`);
+        }
+    }
+
+    async find_channel(channel_id, guild?: discord.Guild): Promise<Result<string, discord.Channel>> {
+        var channel: discord.Channel | undefined;
+        if (guild === undefined) {
+            channel = this.client.channels.cache.get(channel_id);
+            if (channel !== undefined) {
+                return Result.ok(channel);
+            }
+            try {
+                return Result.ok(await this.client.channels.fetch(channel_id));
+            } catch {
+                return Result.error(`Unable to find channel ${channel_id}`);
+            }
+        }
+        channel = guild.channels.cache.get(channel_id);
+        if (channel !== undefined) {
+            return Result.ok(channel);
+        }
+        return Result.error(`Unable to find channel ${channel_id}`);
+    }
+
+    async find_message(guild_id: string | undefined, channel_id: string, message_id: string):
+        Promise<Result<string, discord.Message>> {
+        var guild: discord.Guild | undefined = undefined;
+        if (guild_id !== undefined) {
+            const res = await this.find_guild(guild_id);
+            if (res.isFailure()) {
+                return res.forward();
+            }
+            guild = res.value;
+        }
+        const res = await this.find_channel(channel_id, guild);
+        if (res.isFailure()) {
+            return res.forward();
+        }
+        const channel = res.value;
+        if (!channel.isText()) {
+            return Result.error(`Channel ${channel_id} is not text-based`);
+        }
+        const message = channel.messages.cache.get(message_id);
+        if (message !== undefined) {
+            return Result.ok(message);
+        }
+        try {
+            return Result.ok(await channel.messages.fetch(message_id));
+        } catch {
+            return Result.error(`Could not find message ${message_id} in ${channel_id}`);
+        }
+    }
+
     has_mention(message: discord.Message): Result<boolean, string> {
         var ids: string[] = new Array();
         ids.push(this.client.user!.id);
