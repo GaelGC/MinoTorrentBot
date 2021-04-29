@@ -17,7 +17,7 @@ function split_line(line: string): Result<Error, string[]> {
 
     for (var idx = 0; idx < trimmed.length; idx++) {
         const cur_str = trimmed[idx];
-        const trimmed_str = cur_str.replace("\"", "");
+        const trimmed_str = cur_str.replace(/"/g, "");
         if (cur_str.length > trimmed_str.length + 2) {
             return Result.error(new Error(`Invalid argument ${cur_str}.`));
         }
@@ -46,10 +46,11 @@ function split_line(line: string): Result<Error, string[]> {
         if (quote_pos === 0) {
             in_quote = true;
             quote_buffer = trimmed_str;
+        } else if (last_quote_pos === cur_str.length - 1) {
+            quote_buffer += " " + trimmed_str;
         }
         if (last_quote_pos === cur_str.length - 1) {
             in_quote = false;
-            quote_buffer += " " + trimmed_str;
             dequoted_res.push(quote_buffer);
         }
     }
