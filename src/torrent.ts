@@ -10,28 +10,93 @@ const local_out_dir = process.env.LOCAL_DIR;
 const webtorrent_client = new WebTorrent();
 
 var torrent_map: Map<WebTorrent.Torrent, TorrentState> = new Map();
-setInterval(function () {
+setInterval(async function () {
     for (var torrent of Array.from(torrent_map.values())) {
         torrent.tick();
     }
 }, 5000);
 
 export class TorrentState {
-    constructor(user_url: string, message: discord.Message) {
+    constructor(user_url: string, message: discord.Message, embed?: discord.MessageEmbed) {
         [this.torrent, this.url, this.hash] = this.set_torrent(user_url);
         this.message = message;
         this.embed_message = undefined;
         this.last_update = Date.now();
         this.reminder = undefined;
-        this.embed = new discord.MessageEmbed()
-            .setAuthor("MinoTorrentBot")
-            .setDescription("Temporary post")
-            .setTitle(this.url)
-            .addField('url', this.url);
+        if (embed) {
+            this.embed = embed;
+        } else {
+            this.embed = new discord.MessageEmbed()
+                .setAuthor("MinoTorrentBot")
+                .setDescription("Temporary post")
+                .setTitle(this.url)
+                .addField('url', this.url);
 
-        this.send_embed();
+            this.send_embed();
+        }
         this.torrent.resume();
         torrent_map.set(this.torrent, this);
+    }
+
+    async serialize(): Promise<any> {
+        var obj = {};
+        obj["url"] = this.url;
+        obj["embed"] = this.embed.toJSON();
+        obj["message"] = this.message.id;
+        obj["channel"] = this.message.channel.id;
+        obj["guild"] = this.message.guild?.id;
+        this.torrent.pause();
+        var embed_message = this.embed_message;
+        do {
+            embed_message = this.embed_message;
+            var msg = await embed_message;
+            if (msg !== undefined) {
+                obj["embed_message"] = msg.id;
+                obj["embed_channel"] = msg.channel.id;
+                obj["embed_guild"] = msg.guild?.id;
+            }
+        } while (embed_message !== this.embed_message);
+        obj["torrent_finished"] = this.torrent_finished;
+        obj["message_sent"] = this.message_sent;
+        if (this.reminder !== undefined) {
+            obj["reminder"] = this.reminder.serialize();
+        }
+        return obj;
+    };
+
+    static async parse(val: any): Promise<Result<string, TorrentState>> {
+        var reminder: RemindState | undefined = undefined;
+        if (val["reminder"] !== undefined) {
+            const reminder_parsed = await RemindState.parse(val["reminder"]);
+            if (reminder_parsed.isFailure()) {
+                return reminder_parsed.forward();
+            }
+            reminder = reminder_parsed.value;
+        }
+        const message = await get_discord_manager().find_message(val["guild"], val["channel"], val["message"]);
+        if (message.isFailure()) {
+            return message.forward();
+        }
+        var embed_message: discord.Message | undefined = undefined;
+        if (val["embed_message"] !== undefined) {
+            const embed_message_res =
+                await get_discord_manager().find_message(val["embed_guild"], val["embed_channel"], val["embed_message"]);
+            if (embed_message_res.isFailure()) {
+                return embed_message_res.forward();
+            }
+            embed_message = embed_message_res.value;
+        }
+
+        const embed = val["embed"] === undefined ? undefined : new discord.MessageEmbed(val["embed"]);
+        var torrent = new TorrentState(val["url"], message.value, embed);
+        if (embed_message !== undefined) {
+            const lambda = async function (embed_message: discord.Message) { return embed_message };
+            torrent.embed_message = lambda(embed_message);
+        }
+        torrent.message_sent = val["message_sent"];
+        torrent.torrent_finished = val["torrent_finished"];
+        torrent.reminder = reminder;
+        return Result.ok(torrent);
     }
 
     kill(error: boolean = false) {
@@ -137,7 +202,10 @@ export class TorrentState {
             var edit = message.edit(this.embed!);
             if (finished) {
                 edit = edit.then((message) => {
-                    this.reply_to_message(`Download for ${this.url} finished. See ${message.url} for details`);
+                    if (!this.message_sent) {
+                        this.reply_to_message(`Download for ${this.url} finished. See ${message.url} for details`);
+                        this.message_sent = true;
+                    }
                     return message;
                 });
             }
@@ -193,4 +261,5 @@ export class TorrentState {
     reminder: RemindState | undefined;
     torrent: WebTorrent.Torrent;
     private torrent_finished: boolean = false;
+    private message_sent: boolean = false;
 };
