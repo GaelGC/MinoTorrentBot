@@ -40,7 +40,7 @@ class DiscordManager {
         const emojis = emojis_res.value;
 
         var res: string = "";
-        const tens = percent / 10;
+        const tens = Math.floor(percent / 10);
         const units = percent % 10;
         for (var iter = 0; iter < 10; iter++) {
             if (tens > iter) {
