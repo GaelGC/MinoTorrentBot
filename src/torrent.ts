@@ -9,6 +9,20 @@ import { bot_config } from './main';
 
 const webtorrent_client = new WebTorrent();
 
+interface Substitution {
+    src: string;
+    dst: string;
+};
+
+const substitutions: Substitution[] = bot_config["substitutions"];
+function apply_substitutions(url: string): string {
+    for (const Substitution of substitutions) {
+        const regex = new RegExp(Substitution.src, "g");
+        url = url.replace(regex, Substitution.dst);
+    }
+    return url;
+}
+
 var torrent_map: Map<WebTorrent.Torrent, TorrentState> = new Map();
 setInterval(async function () {
     for (var torrent of Array.from(torrent_map.values())) {
@@ -132,6 +146,7 @@ export class TorrentState {
     }
 
     private set_torrent(url: string): [WebTorrent.Torrent, string, string] {
+        url = apply_substitutions(url);
         console.log(`Downloading ${url}`);
 
         const hash = CryptoJS.SHA256(url);

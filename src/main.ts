@@ -1,3 +1,6 @@
+import fs = require('fs');
+export const bot_config = JSON.parse(fs.readFileSync("config.json").toString());
+
 require('dotenv').config()
 import discord = require('discord.js');
 require('discord-reply');
@@ -6,9 +9,7 @@ import { TorrentState } from './torrent';
 import { parse_line, split_message } from './parser';
 import { get_discord_manager, initialize_discord_manager } from './discord_manager';
 import { Result } from 'typescript-result';
-import fs = require('fs');
 
-export const bot_config = JSON.parse(fs.readFileSync("config.json").toString());
 
 const client = new discord.Client();
 initialize_discord_manager(client);

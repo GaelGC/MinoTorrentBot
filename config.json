@@ -1,4 +1,7 @@
 {
     "remote_directory": "http://site/",
-    "local_directory": "/srv/http"
+    "local_directory": "/srv/http",
+    "substitutions": [
+        {"src": "(^[0-9]+$)", "dst": "https://site/$1.torrent"}
+    ]
 }
