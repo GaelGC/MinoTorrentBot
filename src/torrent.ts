@@ -5,9 +5,8 @@ import { get_discord_manager } from './discord_manager';
 import CryptoJS = require('crypto-js');
 import { RemindState } from './reminder';
 import fs = require('fs');
+import { bot_config } from './main';
 
-const remote_out_dir = process.env.REMOTE_DIR;
-const local_out_dir = process.env.LOCAL_DIR;
 const webtorrent_client = new WebTorrent();
 
 var torrent_map: Map<WebTorrent.Torrent, TorrentState> = new Map();
@@ -25,6 +24,8 @@ setInterval(async function () {
 }, 300000);
 
 export class TorrentState {
+    readonly remote_out_dir = bot_config["remote_directory"];
+    readonly local_out_dir = bot_config["local_directory"];
     constructor(user_url: string, message: discord.Message, embed?: discord.MessageEmbed) {
         [this.torrent, this.url, this.hash] = this.set_torrent(user_url);
         this.message = message;
@@ -135,7 +136,7 @@ export class TorrentState {
 
         const hash = CryptoJS.SHA256(url);
         const torrent = webtorrent_client.add(url,
-            { path: `${local_out_dir}/${hash}` });
+            { path: `${this.local_out_dir}/${hash}` });
         torrent.pause();
 
         torrent.on('error', (err) => {
@@ -204,7 +205,7 @@ export class TorrentState {
                     path = path.replace(/ /g, "%20");
                     path = path.replace(/\(/g, "%28");
                     path = path.replace(/\)/g, "%29");
-                    description += `[${file.name}](${remote_out_dir}/${hash}/${path})` + '\n';
+                    description += `[${file.name}](${this.remote_out_dir}/${hash}/${path})` + '\n';
                     console.log(description);
                 });
                 description += `<@${this.message.author.id}>`;

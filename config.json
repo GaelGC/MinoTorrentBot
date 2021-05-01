@@ -1,0 +1,4 @@
+{
+    "remote_directory": "http://site/",
+    "local_directory": "/srv/http"
+}

@@ -8,6 +8,8 @@ import { get_discord_manager, initialize_discord_manager } from './discord_manag
 import { Result } from 'typescript-result';
 import fs = require('fs');
 
+export const bot_config = JSON.parse(fs.readFileSync("config.json").toString());
+
 const client = new discord.Client();
 initialize_discord_manager(client);
 
