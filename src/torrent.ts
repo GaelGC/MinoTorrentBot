@@ -198,8 +198,7 @@ export class TorrentState {
     }
 
     private reply_to_message(response: string) {
-        const fake_message: any = this.message;
-        fake_message.lineReply(response);
+        this.message.lineReply(response).catch((err) => console.log(err));;
     }
 
     private _update_embed(torrent: WebTorrent.Torrent, percent: number,
@@ -228,6 +227,7 @@ export class TorrentState {
                 console.log("Set desc as " + description);
             }
             var edit = message.edit(this.embed!);
+            edit.catch((err) => console.log(err));
             if (finished) {
                 edit = edit.then((message) => {
                     if (!this.message_sent) {

@@ -1,4 +1,4 @@
-import discord = require('discord.js');
+import * as discord from 'discord.js';
 import { Result } from 'typescript-result';
 
 class DiscordManager {
