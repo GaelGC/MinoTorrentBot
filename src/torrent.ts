@@ -244,7 +244,7 @@ export class TorrentState {
 
     update_embed(torrent: WebTorrent.Torrent, percent: number,
         important: boolean = false, finished: boolean = false) {
-        if (important || Date.now() - this.last_update > 5000) {
+        if (important || Date.now() - this.last_update > 30000) {
             const res = this._update_embed(torrent, percent, important, finished);
             if (res.isSuccess()) {
                 this.last_update = Date.now();
