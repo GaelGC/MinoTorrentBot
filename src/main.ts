@@ -218,7 +218,7 @@ client.on('message', message => {
     }
 
     const role_id = getRole(message.guild);
-    const tag: RegExp = new RegExp(`<@(!${client.user.id}|&${role_id})>`);
+    const tag: RegExp = new RegExp(`<@(!?${client.user.id}|&${role_id})>`);
     let text = message.content;
     console.log(text);
     if (!text.match(tag)) {
