@@ -50,7 +50,7 @@ function state_str(msg: discord.MessageEmbed, percent: number) {
             str += emojis[0].toString();
         }
     }
-    msg.addField("state", str);
+    msg.addField("state", `${str} ${percent}%`);
     return msg;
 }
 
