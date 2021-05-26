@@ -154,7 +154,11 @@ function handle_line(message: discord.Message, line: string[]) {
         const hash = embed.hash;
         var description = "";
         torrent.files.forEach((file) => {
-            description += `[${file.name}](${remote_out_dir}/${hash}/${file.path.replace(/ /g, "%20")})` + '\n';
+            var path = file.path;
+            path = path.replace(/ /g, "%20");
+            path = path.replace(/\(/g, "%28");
+            path = path.replace(/\)/g, "%29");
+            description += `[${file.name}](${remote_out_dir}/${hash}/${path})` + '\n';
             console.log(description);
         });
         description += `<@${embed.message.author.id}>`;
