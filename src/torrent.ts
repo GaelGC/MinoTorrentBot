@@ -35,7 +35,7 @@ setInterval(async function () {
         torrents.push(await torrent.serialize());
     }
     fs.writeFileSync("torrents.json", JSON.stringify(torrents));
-}, 300000);
+}, 30000);
 
 export class TorrentState {
     readonly remote_out_dir = bot_config["remote_directory"];
@@ -132,7 +132,7 @@ export class TorrentState {
         this.reminder?.kill();
         torrent_map.delete(this.torrent);
         if (error) {
-            this.embed_message?.then(m => m.delete());
+            this.embed_message?.then(m => m.delete()).catch(x => console.error(`Error ${x} while deleting the message ${this.message.id}`));
         }
     }
 
@@ -169,7 +169,7 @@ export class TorrentState {
             const emoji = get_discord_manager().get_emoji("torrent_101");
 
             if (emoji.isSuccess()) {
-                this.message.react(emoji.value);
+                this.message.react(emoji.value).catch(err => console.error(`Got error ${err} while reacting to ${this.message.id}`));
             } else {
                 this.reply_to_message(emoji.error);
             }
@@ -194,11 +194,17 @@ export class TorrentState {
     }
 
     send_embed() {
-        this.embed_message = this.message.channel.send(this.embed);
+        try {
+            this.embed_message = this.message.channel.send(this.embed);
+        } catch (err) {
+            console.error(`Got error ${err} while sending embed for ${this.message.id}`);
+            // TODO: Proper error handling in caller.
+            throw err;
+        }
     }
 
     private reply_to_message(response: string) {
-        this.message.lineReply(response).catch((err) => console.log(err));;
+        this.message.lineReply(response).catch((err) => console.error(err));;
     }
 
     private _update_embed(torrent: WebTorrent.Torrent, percent: number,
